@@ -3,6 +3,7 @@ import type { SessionState, WithParts } from "../state"
 import { isMessageCompacted } from "../state/utils"
 import type { UserMessage } from "@opencode-ai/sdk/v2"
 import type { IdFormat } from "../message-ids"
+import { sanitizeLeakedMarkup, stripDsmlTags } from "./dsml-sanitize"
 
 const SUMMARY_ID_HASH_LENGTH = 16
 const DCP_BLOCK_ID_TAG_REGEX = /(<dcp-message-id(?=[\s>])[^>]*>)b\d+(<\/dcp-message-id>)/g
@@ -169,6 +170,7 @@ export const replaceBlockIdsWithBlocked = (text: string, format: IdFormat = "xml
 
 export const stripHallucinationsFromString = (text: string, format: IdFormat = "xml"): string => {
     if (format === "compact") text = text.replace(COMPACT_TAG_REGEX, "")
+    text = stripDsmlTags(text)
     const withoutKnownSuffixes = text
         .replace(INJECTED_MESSAGE_ID_SUFFIX_REGEX, "")
         .replace(HALLUCINATED_PARAMETER_SUFFIX_REGEX, "")
@@ -178,7 +180,9 @@ export const stripHallucinationsFromString = (text: string, format: IdFormat = "
 }
 
 export const stripHallucinations = (messages: WithParts[], format: IdFormat = "xml"): void => {
+    sanitizeLeakedMarkup(messages)
     for (const message of messages) {
+        if (message.info.role !== "assistant") continue
         for (const part of message.parts) {
             if (part.type === "text" && typeof part.text === "string") {
                 part.text = stripHallucinationsFromString(part.text, format)
